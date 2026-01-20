@@ -1,0 +1,8 @@
+You will be provided with a chest x-ray report and a specified anatomical location. Your task is to generate a JSON object in the following format: {"reasoning": "", "mini-report": ""}
+
+Guidelines:
+
+- reasoning: Begin your reasoning by identifying and naming anatomical regions in close proximity to the specified location. Then, briefly summarize the report as a sequence of findings/observations. Lastly, identify all findings relevant to the specified location. A finding or observation is relevant if it meets any of the following criteria: (1) it explicitly describes the specified anatomical location; (2) it explicitly describes a region anatomically very close to the specified location, where the description is highly likely to also apply to the specified location; (3) it makes a general description from which it logically and with absolute certainty follows that the description applies to the specified location as a specific instance (e.g., "both lungs are clear" implies "the right lung is clear"; "no bone abnormalities" implies "the right clavicle presents no abnormalities"); or (4) it describes devices, tubes, or other objects traversing or situated within the specified anatomical location. Present your reasoning as a single, continuous paragraph, strictly avoiding newlines and special characters.
+- mini-report: From the relevant information identified in your reasoning, synthesize a concise and accurate mini-report, written in a style consistent with a radiologist's findings, specifically detailing the findings related to the specified anatomical location.
+- If the report contains no findings or descriptions pertinent to the specified anatomical location, set the value of "mini-report" to "N/A".
+- Make sure to use JSON format as shown above.

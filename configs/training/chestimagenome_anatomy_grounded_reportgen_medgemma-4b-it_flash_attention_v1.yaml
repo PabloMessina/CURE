@@ -1,0 +1,84 @@
+# Experiment Configuration for MedGemma Fine-tuning
+
+run_name: chestimagenome_anatomy_grounded_reportgen_medgemma-4b-it_flash_attention_v1
+
+model:
+  base_model_id: "google/medgemma-4b-it"
+  use_flash_attention: true # <-- THIS IS THE NEW KEY
+
+training:
+  # --- Core Training Parameters ---
+  learning_rate: 2.0e-4
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 8
+  gradient_accumulation_steps: 4
+  optim: "adamw_torch_fused"
+  bf16: true
+
+  # --- Duration Control (max_steps overrides num_train_epochs) ---
+  num_train_epochs: 1
+  max_steps: 200 # Set to -1 to use num_train_epochs
+
+  # --- Evaluation and Saving Control ---
+  eval_strategy: "steps"
+  eval_steps: 100
+  save_strategy: "steps"
+  save_steps: 100
+
+  # --- Checkpoint Management ---
+  save_total_limit: 2 # Limit the number of saved checkpoints
+  load_best_model_at_end: false
+  metric_for_best_model: "eval_loss" # The metric to determine the "best" model
+
+  # --- Logging and Reporting ---
+  logging_steps: 10
+  report_to: "wandb"
+
+  # --- Resuming from a checkpoint ---
+  # resume_from_checkpoint_path: /path/to/your/experiment/dir/checkpoint-1000
+  resume_from_checkpoint_path: null # Set to a path to resume
+  # Path to a checkpoint from a *different* experiment to initialize LoRA weights.
+  # This is ONLY used when starting a new run from scratch.
+  # pretrained_lora_adapter_path: "/mnt/researchers/denis-parra/workspace_pamessina/ivul-biomed-vlm/experiments/chestimagenome_anatomy_grounded_reportgen_medgemma-4b-it/checkpoint-1000"
+
+dataset:
+  train:
+    split: "train"
+    prompt_modes: ["localize_and_describe", "describe", "localize"]
+    prompt_mode_weights:
+      localize_and_describe: 1.0
+      describe: 1.0
+      localize: 1.0
+    bbox_format: "cxcywh"
+    return_image_path: true
+    image_transforms_kwargs:
+      use_model_specific_transforms: true
+      model_name: "pil_image_only"
+      image_size: [448, 448]
+      bbox_format: "cxcywh"
+      is_train: false
+
+  val:
+    use_random_subset: true  # Enable the feature
+    subset_size: 100         # Set K, the number of samples per validation run
+    # Nest the original creation args for better organization
+    creation_args:
+      split: "val"
+      prompt_modes: ["localize_and_describe", "describe", "localize"]
+      bbox_format: "cxcywh"
+      return_image_path: true
+      image_transforms_kwargs:
+        use_model_specific_transforms: true
+        model_name: "pil_image_only"
+        image_size: [448, 448]
+        bbox_format: "cxcywh"
+        is_train: false
+
+# --- Tracking (Weights & Biases) ---
+tracking:
+  wandb:
+    enabled: true
+    project: "anatomy-grounded-reportgen"
+    run_name: "chestimagenome_anatomy_grounded_reportgen_medgemma-4b-it_flash_attention_v1"
+    tags: ["dataset:chest-imagenome", "model:medgemma-4b-it", "task:anatomy-grounded-report-generation"]
+    notes: "Fine-tuning MedGemma-4B-IT on Chest-Imagenome for Anatomy-Grounded Report Generation"

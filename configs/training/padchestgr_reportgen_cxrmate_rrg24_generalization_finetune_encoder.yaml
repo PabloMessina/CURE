@@ -1,0 +1,123 @@
+# =========================
+# Training Configuration
+# =========================
+
+# --- Run Info ---
+run_name: "padchestgr_reportgen_cxrmate_rrg24_generalization_finetune_encoder"
+
+# --- Model Configuration ---
+model:
+  name: "aehrc/cxrmate-rrg24"
+  model_name_or_path: "aehrc/cxrmate-rrg24" # Intended to be a Hugging Face model path
+  # Relative or absolute path to a pretrained checkpoint
+  pretrained_checkpoint_path: "padchestgr_reportgen_cxrmate_rrg24_generalization_finetune_projection/best.pth"
+  freeze_config:
+    freeze_all: true
+    unfreeze_modules: # List of modules to unfreeze
+      - "encoder"
+
+# --- Tokenization Configuration ---
+train_tokenization_config:
+  max_length: 512
+
+# --- Optimizer Configuration ---
+optimizer:
+  type: "AdamW"
+  lr: 1.0e-6
+  kwargs:
+    weight_decay: 0.01
+    # Add more optimizer kwargs as needed
+
+# --- LR Scheduler Configuration ---
+lr_scheduler:
+  type: "ExponentialCyclicLR"
+  step_mode: "batch"  # or "epoch" if you want to step every epoch
+  kwargs:
+    max_lr: 8.0e-6
+    step_size_up: 200
+    step_size_down: 200
+
+# --- Training Settings ---
+training:
+  num_epochs: 20
+  batches_per_epoch: 600
+  gradient_accumulation_steps: 1
+  max_grad_norm: 1.0
+  device_type: "cuda"  # or "mps" or "cpu"
+  use_mixed_precision: true
+  loss_computation_strategy: "aehrc/cxrmate-rrg24" # or "default"
+  log_interval_steps: 50 # Log every 50 steps
+
+# --- Training Dataset Configuration ---
+train_dataset_config:
+  name: "padchest-gr"
+  batch_size: 32
+  num_workers: 3
+  constructor_kwargs:
+    split: "train"
+    grounded: false
+    language: "en"
+    image_format: "jpg"
+    return_image_path: false
+    image_transforms_kwargs:
+      use_model_specific_transforms: false
+      image_size: 384
+      image_mean: [0.485, 0.456, 0.406]
+      image_std: [0.229, 0.224, 0.225]
+      is_train: true # Turn on data augmentation
+
+# --- Validation Dataset Configuration ---
+val_dataset_config:
+  name: "padchest-gr"
+  batch_size: 32
+  num_workers: 3
+  constructor_kwargs:
+    split: "validation"
+    grounded: false
+    language: "en"
+    image_format: "jpg"
+    return_image_path: false
+    image_transforms_kwargs:
+      use_model_specific_transforms: false
+      image_size: 384
+      image_mean: [0.485, 0.456, 0.406]
+      image_std: [0.229, 0.224, 0.225]
+      is_train: false
+
+# --- Evaluation Configuration ---
+evaluation:
+  metrics:
+    - CheXbert
+    - BERTScore
+  
+  checkpoint_metric_weights:
+    CheXbert_macro_f1: 1.0
+    CheXbert_micro_f1: 1.0
+    CheXbert_accuracy: 1.0
+    BERTScore_F1: 1.5
+
+  decoding:
+    num_beams: 4
+    max_length: 512
+
+# --- Tracking (Weights & Biases) ---
+tracking:
+  wandb:
+    enabled: true
+    project: "biomed-vlm-reportgen"
+    run_name: "padchestgr_reportgen_cxrmate_rrg24_generalization_finetune_encoder"
+    tags: ["dataset:padchest-gr", "model:cxrmate-rrg24", "task:report-generation"]
+    notes: "This is a generalization finetuning run for the cxrmate-rrg24 model on the padchest-gr dataset."
+    epochwise_metrics: # x-axis: epoch
+      - "train/avg_loss"
+      - "val/CheXbert_macro_f1"
+      - "val/CheXbert_micro_f1"
+      - "val/CheXbert_accuracy"
+      - "val/BERTScore_F1"
+      - "val/BERTScore_P"
+      - "val/BERTScore_R"
+    stepwise_metrics: # x-axis: step
+      - "train/batch_loss"
+      - "train/learning_rate"
+      - "train/steps_per_sec"
+

@@ -1,0 +1,190 @@
+run_name: multi_task_medgemma-4b-it_v6_custom_eval_augmentations
+
+model:
+  base_model_id: "google/medgemma-4b-it"
+  use_flash_attention: true
+
+training:
+  # --- Core Training Parameters ---
+  learning_rate: 2.0e-5
+  per_device_train_batch_size: 5
+  per_device_eval_batch_size: 8 # Also used by the custom eval callback
+  gradient_accumulation_steps: 4
+  optim: "adamw_torch_fused"
+  bf16: true
+
+  # --- Duration Control ---
+  num_train_epochs: 1
+  max_steps: 6000
+
+  # --- Evaluation and Saving Strategy ---
+  eval_strategy: "steps"
+  eval_steps: 150
+  save_strategy: "steps"
+  save_steps: 150
+  save_total_limit: 1
+  load_best_model_at_end: false
+
+  # --- NEW: Evaluation Mode Control ---
+  # This block is the master switch for the new evaluation logic.
+  evaluation:
+    mode: "custom" # Set to "custom" to activate GranularEvaluationCallback. "default" for old behavior.
+    
+    # --- Settings for "custom" mode ---
+    save_predictions_to_file: true
+    save_predictions_to_file_name: "predictions_custom_eval.jsonl"    
+    custom_eval_samples_per_dataset: 100 # Number of samples to draw from each validation set.
+    custom_eval_max_new_tokens: 150 # Max tokens for model.generate() in the callback.    
+    # Name for the aggregate metric that the custom callback will compute.
+    # This is what TopKCheckpointCallback will track.
+    custom_metric_for_best_model: "eval_overall_iou_cxrfescore"
+    custom_greater_is_better: true
+    # Weights for the aggregate metric.
+    metric_weights:
+      bbox_iou: 0.75
+      cxrfescore: 0.25
+
+  # --- Logging and Reporting ---
+  logging_steps: 1
+  report_to: "wandb"
+
+  # --- Resuming from a checkpoint ---
+  resume_from_checkpoint_path: null
+  # pretrained_lora_adapter_path: "/mnt/researchers/denis-parra/workspace_pamessina/ivul-biomed-vlm/experiments/multi_task_medgemma-4b-it_flash_attention_v2_uniform_sampling/topk-checkpoints/checkpoint-5300-eval_loss-0.587030"
+  pretrained_lora_adapter_path: "/mnt/researchers/denis-parra/workspace_pamessina/ivul-biomed-vlm/experiments/chestimagenome_anatomy_grounded_reportgen_medgemma-4b-it/checkpoint-1000"
+  
+datasets:
+  train:
+    - name: "chest-imagenome"
+      weight: 1.0
+      args:
+        split: "train"
+        prompt_modes: ["locate_and_describe", "describe", "locate"]
+        prompt_mode_weights:
+          locate_and_describe: 1.0
+          describe: 1.0
+          locate: 1.0
+        bbox_format: "cxcywh"
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_with_augmentations"
+          image_size: [448, 448]
+          bbox_format: "cxcywh"
+          is_train: true
+        use_weighted_sampling: true
+
+    - name: "padchest-gr"
+      task: "grounded-report-generation"
+      weight: 1.0
+      args:
+        split: "train"
+        grounded: true
+        bbox_format: "cxcywh"
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_with_augmentations"
+          image_size: [448, 448]
+          bbox_format: "cxcywh"
+          is_train: true
+
+    - name: "padchest-gr"
+      task: "phrase-grounding"
+      weight: 1.0
+      args:
+        split: "train"
+        gt_bbox_format: "cxcywh"
+        include_labels_as_phrases: true
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_with_augmentations"
+          image_size: [448, 448]
+          bbox_format: "cxcywh"
+          is_train: true
+        use_weighted_sampling: true
+        
+    - name: "ms-cxr"
+      task: "phrase-grounding"
+      weight: 1.0
+      args:
+        split: "train"
+        gt_bbox_format: "cxcywh"
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_with_augmentations"
+          image_size: [448, 448]
+          bbox_format: "cxcywh"
+          is_train: true
+        use_weighted_sampling: true
+        
+  val:
+    - name: "chest-imagenome"
+      eval_samples: 64
+      max_new_tokens: 200 # Allow longer descriptions
+      args:
+        split: "val"
+        prompt_modes: ["locate_and_describe", "describe", "locate"]
+        bbox_format: "cxcywh"
+        return_image_path: true
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_with_augmentations" 
+          image_size: [448, 448]
+          bbox_format: "cxcywh"
+          is_train: false
+
+    - name: "padchest-gr"
+      task: "grounded-report-generation"
+      eval_samples: 64
+      max_new_tokens: 200 # Allow longer descriptions
+      args:
+        split: "validation"
+        grounded: true
+        bbox_format: "cxcywh"
+        return_image_path: true
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_with_augmentations" 
+          image_size: [448, 448]
+          bbox_format: "cxcywh"
+          is_train: false
+
+    - name: "padchest-gr"
+      task: "phrase-grounding"
+      eval_samples: 64
+      max_new_tokens: 150
+      args:
+        split: "validation"
+        gt_bbox_format: "cxcywh"
+        include_labels_as_phrases: true
+        return_image_path: true
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_with_augmentations" 
+          image_size: [448, 448]
+          bbox_format: "cxcywh"
+          is_train: false
+
+    - name: "ms-cxr"
+      task: "phrase-grounding"
+      eval_samples: 64
+      max_new_tokens: 150
+      args:
+        split: "val"
+        gt_bbox_format: "cxcywh"
+        return_image_path: true
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_with_augmentations" 
+          image_size: [448, 448]
+          bbox_format: "cxcywh"
+          is_train: false
+
+# --- Tracking (Weights & Biases) ---
+tracking:
+  wandb:
+    enabled: true
+    project: "multi-task-medgemma"
+    run_name: "multi_task_medgemma-4b-it_v6_custom_eval_augmentations"
+    tags: ["dataset:chest-imagenome", "dataset:padchest-gr", "dataset:ms-cxr",
+           "model:medgemma-4b-it", "eval:custom"]
+    notes: "Testing the new custom granular evaluation callback with augmentations enabled. This mode evaluates each validation dataset separately using model.generate(), applies augmentations, and tracks a custom score for checkpointing."

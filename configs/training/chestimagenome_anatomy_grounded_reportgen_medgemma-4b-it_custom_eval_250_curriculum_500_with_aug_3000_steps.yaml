@@ -1,0 +1,127 @@
+run_name: chestimagenome_anatomy_grounded_reportgen_medgemma-4b-it_custom_eval_250_curriculum_500_with_aug_3000_steps
+
+model:
+  base_model_id: "google/medgemma-4b-it"
+  use_flash_attention: true
+  lora_config:
+    lora_alpha: 32
+    lora_dropout: 0.05
+    r: 16
+    bias: "none"
+    target_modules: "all-linear"
+    modules_to_save: ["lm_head", "embed_tokens"]
+
+training:
+  # --- Core Training Parameters ---
+  learning_rate: 2.0e-4
+  per_device_train_batch_size: 5
+  per_device_eval_batch_size: 8 # Also used by the custom eval callback
+  gradient_accumulation_steps: 5
+  optim: "adamw_torch_fused"
+  bf16: true
+
+  # --- Duration Control ---
+  num_train_epochs: 1
+  max_steps: 3000
+
+  # --- Evaluation and Saving Strategy ---
+  eval_strategy: "steps"
+  eval_steps: 250
+  save_strategy: "steps"
+  save_steps: 125
+  save_total_limit: 1
+  save_top_k: 1
+  load_best_model_at_end: false
+
+  # --- Evaluation Mode Control ---
+  # This block is the master switch for the new evaluation logic.
+  evaluation:
+    mode: "custom" # Set to "custom" to activate GranularEvaluationCallback. "default" for old behavior.
+    
+    # --- Settings for "custom" mode ---
+    save_predictions_to_file: true
+    save_predictions_to_file_name: "predictions_custom_eval.jsonl"    
+    custom_eval_samples_per_dataset: 100 # Number of samples to draw from each validation set.
+    custom_eval_max_new_tokens: 150 # Max tokens for model.generate() in the callback.    
+    # Name for the aggregate metric that the custom callback will compute.
+    # This is what TopKCheckpointCallback will track.
+    custom_metric_for_best_model: "eval_overall_iou_cxrfescore"
+    custom_greater_is_better: true
+    # Weights for the aggregate metric.
+    metric_weights:
+      bbox_iou: 0.8
+      cxrfescore: 0.2
+
+    skip_curriculum_reweighting: false # Set to true to skip curriculum reweighting.
+    curriculum_reweighting_every_n_steps: 500 # Reweight the datasets every 3000 steps.
+
+  # --- Logging and Reporting ---
+  logging_steps: 5
+  report_to: "wandb"
+
+  # --- Resuming from a checkpoint ---
+  resume_from_checkpoint_path: null
+
+  # Path to a checkpoint from a *different* experiment to initialize LoRA weights.
+  pretrained_lora_adapter_path: null
+
+  # Diagnostics
+  diagnostics:
+    enabled: false # Set to true to activate logging
+    # enabled: true # Set to false to deactivate logging
+    # log_every_n_batches: 25 # How often to gather and save the diagnostics (5 steps = 25 batches due to gradient accumulation)
+    # output_filename: "training_sampling_diagnostics.jsonl"
+  
+datasets:
+  train:
+    - name: "chest-imagenome"
+      weight: 1.0
+      args:
+        split: "train"
+        prompt_modes: ["locate_and_describe", "describe", "locate"]
+        prompt_mode_weights:
+          locate_and_describe: 1.0
+          describe: 1.0
+          locate: 1.0
+        bbox_format: "cxcywh"
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_with_augmentations"
+          bbox_format: "cxcywh"
+          image_size: [448, 448]
+          is_train: true # With augmentations for training
+          augmenter_override_params:
+            apply_clahe: true
+            apply_spatial_train: true
+            apply_color_train: false
+            p_test_in_train: 0.30 # 30% of train images use test pipeline
+        use_weighted_sampling: true
+        
+  val:
+    - name: "chest-imagenome"
+      eval_samples: 300
+      max_new_tokens: 200 # Allow longer descriptions
+      args:
+        split: "val"
+        prompt_modes: ["locate_and_describe", "describe", "locate"]
+        bbox_format: "cxcywh"
+        return_image_path: true
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_with_augmentations" 
+          bbox_format: "cxcywh"
+          image_size: [448, 448]
+          is_train: false # No augmentations for validation (except for CLAHE)
+          augmenter_override_params:
+            apply_clahe: true
+            clahe_clip_limit: [3.0, 3.0] # Make CLAHE deterministic for validation.
+
+# --- Tracking (Weights & Biases) ---
+tracking:
+  wandb:
+    enabled: true
+    project: "anatomy-grounded-reportgen"
+    run_name: "chestimagenome_anatomy_grounded_reportgen_medgemma-4b-it_custom_eval_250_curriculum_500_with_aug_3000_steps"
+    tags: ["dataset:chest-imagenome", "task:anatomy-grounded-report-generation",
+           "model:medgemma-4b-it", "eval:custom", "curriculum:500-steps"]
+    notes: "Custom granular evaluation callback with curriculum reweighting every 500 steps for 3000 steps. Evaluation every 250 steps. Dataset: Chest-Imagenome."

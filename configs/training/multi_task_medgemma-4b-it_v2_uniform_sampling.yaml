@@ -1,0 +1,147 @@
+# Experiment Configuration for MedGemma Fine-tuning on multiple datasets
+
+run_name: multi_task_medgemma-4b-it_flash_attention_v2_uniform_sampling
+
+model:
+  base_model_id: "google/medgemma-4b-it"
+  use_flash_attention: true
+
+training:
+  # --- Core Training Parameters ---
+  learning_rate: 2.0e-5
+  per_device_train_batch_size: 5
+  per_device_eval_batch_size: 8
+  gradient_accumulation_steps: 4
+  optim: "adamw_torch_fused"
+  bf16: true
+
+  # --- Duration Control (max_steps overrides num_train_epochs) ---
+  num_train_epochs: 1
+  max_steps: 10000 # Set to -1 to use num_train_epochs
+
+  # --- Evaluation and Saving Control ---
+  eval_strategy: "steps"
+  eval_steps: 100
+  save_strategy: "steps"
+  save_steps: 100
+
+  # --- Checkpoint Management ---
+  save_total_limit: 1 # Limit the number of saved checkpoints
+  metric_for_best_model: "eval_loss" # The metric to determine the "best" model
+  greater_is_better: false
+  load_best_model_at_end: false
+
+  # --- Logging and Reporting ---
+  logging_steps: 10
+  report_to: "wandb"
+
+  # --- Resuming from a checkpoint ---
+  # resume_from_checkpoint_path: /path/to/your/experiment/dir/checkpoint-1000
+  resume_from_checkpoint_path: null # Set to a path to resume
+  # Path to a checkpoint from a *different* experiment to initialize LoRA weights.
+  # This is ONLY used when starting a new run from scratch.
+  pretrained_lora_adapter_path: "/mnt/researchers/denis-parra/workspace_pamessina/ivul-biomed-vlm/experiments/chestimagenome_anatomy_grounded_reportgen_medgemma-4b-it/checkpoint-1000"
+
+datasets:
+  train: # A list of datasets for the training set
+    - name: "chest-imagenome"
+      weight: 1.0
+      args:
+        split: "train"
+        prompt_modes: ["localize_and_describe", "describe", "localize"]
+        prompt_mode_weights:
+          localize_and_describe: 1.0
+          describe: 1.0
+          localize: 1.0
+        bbox_format: "cxcywh"
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_image_only"
+          image_size: [448, 448]
+          is_train: false
+
+    - name: "padchest-gr"
+      task: "grounded-report-generation"
+      weight: 1.0
+      args:
+        split: "train"
+        grounded: true
+        bbox_format: "cxcywh"
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_image_only"
+          image_size: [448, 448]
+          is_train: false
+
+    - name: "padchest-gr"
+      task: "phrase-grounding"
+      weight: 1.0
+      args:
+        split: "train"
+        gt_bbox_format: "cxcywh"
+        include_labels_as_phrases: true
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_image_only"
+          image_size: [448, 448]
+          is_train: false
+
+    - name: "ms-cxr"
+      task: "phrase-grounding"
+      weight: 1.0
+      args:
+        split: "train"
+        gt_bbox_format: "cxcywh"
+        image_transforms_kwargs:
+          use_model_specific_transforms: true
+          model_name: "pil_image_only"
+          image_size: [448, 448]
+          is_train: false
+
+  val: # A list of datasets for the validation set
+    use_random_subset: true
+    subset_size: 200
+    sources:
+      - name: "chest-imagenome"
+        args:
+          split: "val"
+          prompt_modes: ["localize_and_describe"]
+          bbox_format: "cxcywh"
+          image_transforms_kwargs:
+            use_model_specific_transforms: true
+            model_name: "pil_image_only"
+            image_size: [448, 448]
+            is_train: false
+
+      - name: "padchest-gr"
+        task: "phrase-grounding"
+        args:
+          split: "validation"
+          gt_bbox_format: "cxcywh"
+          include_labels_as_phrases: true
+          image_transforms_kwargs:
+            use_model_specific_transforms: true
+            model_name: "pil_image_only"
+            image_size: [448, 448]
+            is_train: false
+
+      - name: "ms-cxr"
+        task: "phrase-grounding"
+        args:
+          split: "val"
+          gt_bbox_format: "cxcywh"
+          image_transforms_kwargs:
+            use_model_specific_transforms: true
+            model_name: "pil_image_only"
+            image_size: [448, 448]
+            is_train: false
+
+# --- Tracking (Weights & Biases) ---
+tracking:
+  wandb:
+    enabled: true
+    project: "multi-task-medgemma"
+    run_name: "multi_task_medgemma-4b-it_flash_attention_v2_uniform_sampling"
+    tags: ["dataset:chest-imagenome", "dataset:padchest-gr", "dataset:ms-cxr",
+           "model:medgemma-4b-it", "task:anatomy-grounded-report-generation", "task:phrase-grounding"]
+    notes: "Multi-task fine-tuning of MedGemma-4B-IT on Chest-Imagenome, PadChest-GR, and MS-CXR for Phrase Grounding and Anatomy-Grounded Report Generation with uniform sampling"

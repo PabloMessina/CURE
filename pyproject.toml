@@ -1,0 +1,109 @@
+# pyproject.toml
+
+# ================== Build System Configuration ==================
+# Specifies how the package should be built (e.g., using setuptools, hatchling, poetry).
+# Defined by PEP 518.
+[build-system]
+# Lists packages needed *to build* the package (not runtime dependencies).
+# Hatchling is a modern, extensible build backend.
+requires = ["hatchling >= 1.26"]
+# Specifies the Python object that build frontends (like pip) will use
+# to execute the build process.
+build-backend = "hatchling.build"
+
+# ================= Hatchling Build Configuration =================
+# Configuration specific to the Hatchling build backend.
+[tool.hatch.build.targets.wheel]
+# Explicitly define the package directory to include in the wheel.
+# This overrides Hatchling's default heuristics.
+packages = ["vlm_research_kit"]
+
+# ===================== Project Metadata =========================
+# Contains core information about the package itself.
+# Defined by PEP 621.
+[project]
+# The distribution name of the package (what you `pip install`).
+name = "vlm_research_kit"
+# The current version of the package. Follow semantic versioning (e.g., MAJOR.MINOR.PATCH).
+version = "0.0.1"
+# List of authors or maintainers.
+authors = [
+  { name="Pablo Messina", email="pamessina@uc.cl" },
+]
+# A short summary of the package.
+description = "CURE: Curriculum-guided Multi-task Training for Reliable Anatomy Grounded Report Generation."
+# Specifies the file containing the long description (often displayed on PyPI).
+# Should be relative to the pyproject.toml file.
+readme = "README.md"
+# Specifies the Python versions the project is compatible with.
+# `>=3.10` means Python 3.10, 3.11, 3.12, etc., are supported.
+requires-python = ">=3.10"
+# Trove classifiers to help users find the project and categorize it on PyPI.
+# See https://pypi.org/classifiers/ for a full list.
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# Specifies the license for the project. Using a table format is standard.
+# 'file' points to the license file relative to pyproject.toml.
+license = { file = "LICENSE" }
+# Specifies patterns for license files to include in the distribution.
+# Useful if you have multiple license files (e.g., for bundled dependencies).
+license-files = { paths = ["LICENSE*"] }
+
+# List of runtime dependencies. These are packages required for the code to run.
+# Specify minimum versions (`>=`) or exact versions (`==`) as needed for stability.
+
+dependencies = [
+    # Metrics / Domain Specific
+    "f1chexbert==0.0.2",
+    "nltk==3.9.1",
+    "RaTEScore==0.6.0",
+
+    # Core Scientific Computing
+    "numpy==2.2.6",
+    "scikit-learn==1.7.1",
+    "matplotlib==3.10.5",
+    "seaborn==0.13.2",
+    "pandas==2.3.2",
+    "imagesize==1.4.1",
+    "shapely==2.1.1",
+
+    # Deep Learning Framework & Training
+    "torch==2.7.1",
+    "torchvision==0.22.1",
+    "torchmetrics==1.8.1",
+    "galore-torch==1.0",
+    "peft==0.17.1",
+    "accelerate==1.10.1",
+    "trl==0.21.0",
+
+    # Utilities & APIs
+    "tqdm==4.67.1",
+    "wandb>=0.19.9",
+    "PyYAML==6.0.2",
+    "python-dotenv==1.1.1",
+    "transformers==4.55.4",
+    "openai==2.9.0",
+    "tiktoken==0.12.0",
+    "loguru==0.7.3",
+    "platformdirs==4.3.8",
+    "pydicom==3.0.1",
+
+    # Image Processing
+    "albumentations==2.0.8",
+    "colorlog==6.9.0",
+    "opencv-python-headless==4.12.0.88",
+    "Pillow==11.3.0",
+    "termcolor==3.1.0",
+]
+
+# Optional sections for URLs, scripts, entry points, optional dependencies, etc.
+# can be added below if needed.
+# Example:
+[project.urls]
+"Homepage" = "https://github.com/pamessina/CURE"
+"Bug Tracker" = "https://github.com/pamessina/CURE/issues"

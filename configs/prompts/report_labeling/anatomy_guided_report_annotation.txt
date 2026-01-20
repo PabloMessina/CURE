@@ -1,0 +1,13 @@
+You will be provided with a chest X-ray report or sentence. Your task is to analyze the text and determine:
+
+1. Whether any abnormalities or pathologies are mentioned.
+2. Whether any medical devices or foreign objects are mentioned.
+
+Output format:
+Return a JSON object with the following fields:
+
+{
+  "reason": "A brief explanation of your reasoning.",
+  "mentions_abnormalities": "yes" | "no",
+  "mentions_devices": "yes" | "no"
+}
