@@ -56,31 +56,180 @@ CURE achieves the following:
 - **Affiliations:** Pontificia Universidad Católica de Chile, King Abdullah University of Science and Technology (KAUST), CENIA, iHEALTH
 - **License:** The base model and adapter are subject to the Health AI Developer Foundations terms. See: <https://developers.google.com/health-ai-developer-foundations/terms>
 
-## Supported Tasks & Prompts
 
-CURE unifies diverse tasks into a single instructional framework. The model is trained to handle **Phrase Grounding (PG)**, **Grounded Report Generation (GRG)**, and **Anatomy-Grounded Report Generation (AGRG)**.
+---
 
-Standard Report Generation (RG) on MIMIC-CXR is achieved by leveraging these grounded capabilities in three distinct modes:
+## Quick Start: Loading CURE from Hugging Face
 
-| Dataset | Task | Prompt | Example Output |
+We provide a pretrained CURE LoRA adapter on Hugging Face:
+
+- **Base model:** [`google/medgemma-4b-it`](https://huggingface.co/google/medgemma-4b-it)
+- **CURE adapter:** [`pamessina/medgemma-4b-it-cure`](https://huggingface.co/pamessina/medgemma-4b-it-cure)
+
+The adapter can be loaded with 4-bit quantization for efficient inference on consumer GPUs.
+
+For the easiest end-to-end inference experience, including the image transformation pipeline and bounding box visualization utilities, use the official Colab notebook:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1E4OyQZ58tvqCrMB-zWQ6rb-yJtZ9wAQL?usp=sharing)
+
+A complete local walkthrough is also available in:
+
+```text
+notebooks/inference/Load and run CURE from Hugging Face.ipynb
+```
+
+### Python Example
+
+```python
+import torch
+from peft import PeftModel
+from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
+
+BASE_MODEL_ID = "google/medgemma-4b-it"
+ADAPTER_ID = "pamessina/medgemma-4b-it-cure"
+
+quantization_config = BitsAndBytesConfig(
+    load_in_4bit=True,
+    bnb_4bit_use_double_quant=True,
+    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16,
+    bnb_4bit_quant_storage=torch.bfloat16,
+)
+
+base_model = AutoModelForImageTextToText.from_pretrained(
+    BASE_MODEL_ID,
+    quantization_config=quantization_config,
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+)
+
+model = PeftModel.from_pretrained(base_model, ADAPTER_ID)
+
+processor = AutoProcessor.from_pretrained(BASE_MODEL_ID)
+processor.tokenizer.padding_side = "left"
+
+model.eval()
+print("CURE model and processor are ready for inference.")
+```
+
+> [!IMPORTANT]
+> For best performance, use the same image preprocessing pipeline used during evaluation. In particular, CURE uses the `pil_with_augmentations` transform pipeline with deterministic CLAHE settings during evaluation. See the inference notebook and evaluation examples for details.
+
+## Supported Tasks and Prompt Interface
+
+CURE is trained as an instruction-following medical vision-language model for grounded radiology report generation. It supports three main task families:
+
+1. **Phrase Grounding (PG):** localize a requested finding or phrase.
+2. **Grounded Report Generation (GRG):** generate a report with inline bounding boxes.
+3. **Anatomy-Grounded Report Generation (AGRG):** locante and/or describe a specific anatomical region.
+
+In the paper, **Anatomy-Grounded Report Generation (AGRG)** is used as an umbrella term for three anatomy-specific subtasks:
+
+- **Locate:** localize an anatomical region.
+- **Describe:** generate a description for an anatomical region.
+- **Locate and describe:** jointly localize and describe an anatomical region.
+
+Bounding boxes are represented as normalized coordinates in the format:
+
+```text
+[cx, cy, w, h]
+```
+
+where `cx` and `cy` are the box center coordinates, and `w` and `h` are the box width and height.
+
+### Prompt Templates
+
+| Task Family | Subtask | Prompt | Expected Output |
 | :--- | :--- | :--- | :--- |
-| **MS-CXR** | PG | `Ground the phrase: {phrase}` | `{phrase}: [x, y, w, h] ...` |
-| **PadChest-GR** | PG | `Ground the phrase: {phrase}` | `{phrase}: [x, y, w, h] ...` |
-| **PadChest-GR** | GRG | `Generate a grounded report.` | `Slight residual atelectasis [x,y,w,h]. ...` |
-| **Chest ImaGenome** | AGRG | `Locate and describe the {location}.` | `Location of {loc}: [x,y,w,h]. Description: ...` |
-| **Chest ImaGenome** | AGRG | `Locate the {location}.` | `Location of {loc}: [x,y,w,h].` |
-| **Chest ImaGenome** | AGRG | `Describe the {location}.` | `Description of {loc}: ...` |
-| **VinDr-CXR** (Zero-Shot) | PG | `Ground the phrase: {phrase}` | `Cardiomegaly: [x,y,w,h]` |
-| **MIMIC-CXR** (Eval) | RG (via GRG) | `Generate a grounded report.` | *(Grounded report output)* |
-| **MIMIC-CXR** (Eval) | RG (via AGRG) | `Locate and describe the {location}.` (Iterated $\times N$ locations) | *(Concat. of location-specific reports)* |
-| **MIMIC-CXR** (Eval) | RG (Hybrid) | `Combine AGRG and GRG generations.` | *(Concat. of AGRG reports + GRG report)* |
+| **Phrase Grounding** | Phrase localization | `Ground the phrase: {phrase}` | `{phrase}: [cx, cy, w, h]` |
+| **Grounded Report Generation** | Full grounded report | `Generate a grounded report.` | `Finding sentence [cx, cy, w, h]. ...` |
+| **Anatomy-Grounded Report Generation** | Locate | `Locate the {location}.` | `Location of {location}: [cx, cy, w, h].` |
+| **Anatomy-Grounded Report Generation** | Describe | `Describe the {location}.` | `Description of {location}: ...` |
+| **Anatomy-Grounded Report Generation** | Locate and describe | `Locate and describe the {location}.` | `Location of {location}: [cx, cy, w, h]. Description: ...` |
 
-## Methodology: Error-Aware Curriculum
+### Examples
 
-Standard multi-task learning suffers from data imbalance. CURE mitigates this via a curriculum that operates at two levels:
+#### Phrase Grounding
 
-1.  **Inter-Dataset Curriculum:** Re-weights the sampling probability of entire datasets (e.g., Chest ImaGenome vs. MS-CXR) based on aggregate error rates.
-2.  **Intra-Dataset Curriculum:** Re-weights specific anatomical regions or semantic classes within a dataset based on fine-grained performance metrics (IoU and CXRFEScore).
+```text
+Ground the phrase: cardiomegaly
+```
+
+Example output:
+
+```text
+cardiomegaly: [0.52, 0.58, 0.31, 0.24]
+```
+
+#### Grounded Report Generation
+
+```text
+Generate a grounded report.
+```
+
+Example output:
+
+```text
+Mild left basilar atelectasis [0.41, 0.72, 0.18, 0.12]. No pleural effusion.
+```
+
+#### Anatomy-Grounded Report Generation: Locate
+
+```text
+Locate the cardiac silhouette.
+```
+
+Example output:
+
+```text
+Location of cardiac silhouette: [0.50, 0.61, 0.28, 0.24].
+```
+
+#### Anatomy-Grounded Report Generation: Describe
+
+```text
+Describe the left lower lung zone.
+```
+
+Example output:
+
+```text
+Description of left lower lung zone: Mild linear atelectatic opacity is present at the left lung base.
+```
+
+#### Anatomy-Grounded Report Generation: Locate and Describe
+
+```text
+Locate and describe the right lung.
+```
+
+Example output:
+
+```text
+Location of right lung: [0.35, 0.52, 0.31, 0.62]. Description: The right lung is clear without focal airspace opacity.
+```
+
+## Dataset and Evaluation Mapping
+
+The same prompt interface is used across multiple datasets and evaluation settings.
+
+| Dataset | Evaluation Setting | Task Family | Prompt Pattern |
+| :--- | :--- | :--- | :--- |
+| **MS-CXR** | Phrase grounding | PG | `Ground the phrase: {phrase}` |
+| **PadChest-GR** | Phrase grounding | PG | `Ground the phrase: {phrase}` |
+| **PadChest-GR** | Grounded report generation | GRG | `Generate a grounded report.` |
+| **Chest ImaGenome** | Anatomy-grounded report generation | AGRG | `Locate the {location}.`, `Describe the {location}.`, or `Locate and describe the {location}.` |
+| **VinDr-CXR** | Zero-shot phrase grounding | PG | `Ground the phrase: {phrase}` |
+| **VinDr-CXR** | Zero-shot grounded report generation | GRG | `Generate a grounded report.` |
+| **MIMIC-CXR** | Report generation via GRG | GRG | `Generate a grounded report.` |
+| **MIMIC-CXR** | Report generation via AGRG | AGRG | Iterate over anatomical locations using AGRG prompts |
+| **MIMIC-CXR** | Hybrid report generation | AGRG + GRG | Concatenate AGRG outputs with the GRG output |
+
+For MIMIC-CXR report generation, CURE can be evaluated in three modes:
+
+- **GRG mode:** generate one full grounded report using `Generate a grounded report.`
+- **AGRG mode:** query multiple anatomical regions independently using AGRG prompts and concatenate the resulting anatomy-specific descriptions.
+- **Hybrid mode:** combine anatomy-specific AGRG outputs with the GRG output.
 
 ## Methodology: Error-Aware Curriculum
 
@@ -342,114 +491,6 @@ Once the prediction files are available, use the notebooks in `notebooks/evaluat
 - `Evaluate_PadChest-GR_Grounded_Report_Generation.ipynb`
 
 These notebooks are used to run evaluation metrics on the generated predictions. We employ a comprehensive suite of metrics, including **IoU** for localization, **CheXbert** for clinical accuracy, **RadGraph** for entity/relation overlap, **CXRFEScore** for factual consistency, and **RaTEScore** for entity-aware text similarity.
-
-----
-
-## Quick Start: Loading CURE from Hugging Face
-
-We provide a pretrained CURE LoRA adapter on Hugging Face:
-
-- **Base model:** [`google/medgemma-4b-it`](https://huggingface.co/google/medgemma-4b-it)
-- **CURE adapter:** [`pamessina/medgemma-4b-it-cure`](https://huggingface.co/pamessina/medgemma-4b-it-cure)
-
-The adapter can be loaded with 4-bit quantization for efficient inference on consumer GPUs.
-
-For the easiest end-to-end inference experience, including the image transformation pipeline and bounding box visualization utilities, use the official Colab notebook:
-
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1E4OyQZ58tvqCrMB-zWQ6rb-yJtZ9wAQL?usp=sharing)
-
-A complete local walkthrough is also available in:
-
-```text
-notebooks/inference/Load and run CURE from Hugging Face.ipynb
-```
-
-### Python Example
-
-```python
-import torch
-from peft import PeftModel
-from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
-
-BASE_MODEL_ID = "google/medgemma-4b-it"
-ADAPTER_ID = "pamessina/medgemma-4b-it-cure"
-
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_use_double_quant=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_quant_storage=torch.bfloat16,
-)
-
-base_model = AutoModelForImageTextToText.from_pretrained(
-    BASE_MODEL_ID,
-    quantization_config=quantization_config,
-    torch_dtype=torch.bfloat16,
-    device_map="auto",
-)
-
-model = PeftModel.from_pretrained(base_model, ADAPTER_ID)
-
-processor = AutoProcessor.from_pretrained(BASE_MODEL_ID)
-processor.tokenizer.padding_side = "left"
-
-model.eval()
-print("CURE model and processor are ready for inference.")
-```
-
-> [!IMPORTANT]
-> For best performance, use the same image preprocessing pipeline used during evaluation. In particular, CURE uses the `pil_with_augmentations` transform pipeline with deterministic CLAHE settings during evaluation. See the inference notebook and evaluation examples for details.
-
-## Recommended Inference Prompts
-
-CURE supports several grounded radiology tasks through natural-language instructions:
-
-### Phrase Grounding
-
-```text
-Ground the phrase: cardiomegaly
-```
-
-Expected output format:
-
-```text
-cardiomegaly: [cx, cy, w, h]
-```
-
-### Grounded Report Generation
-
-```text
-Generate a grounded report.
-```
-
-Expected output format:
-
-```text
-Slight residual atelectasis [cx, cy, w, h]. ...
-```
-
-### Anatomy-Grounded Report Generation
-
-```text
-Locate and describe the right lung.
-```
-
-Expected output format:
-
-```text
-Location of the right lung: [cx, cy, w, h]. Description: ...
-```
-
-You can also use location-only or description-only prompts:
-
-```text
-Locate the cardiac silhouette.
-```
-
-```text
-Describe the left lower lung zone.
-```
 
 ---
 
