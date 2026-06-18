@@ -526,8 +526,6 @@ We welcome feedback and contributions to improve the reliability of Biomedical V
 - **Issues:** If you encounter bugs, have questions about the methodology, or face issues with cluster setup, please [open an issue](https://github.com/PabloMessina/CURE/issues). We aim to respond as quickly as possible.
 - **Pull Requests:** Contributions to the `CURE` repository are welcome.
 
-* **Pull Requests:** Contributions to the `CURE` repository are welcome.
-
 ## License and Terms
 
 CURE is distributed as a PEFT/LoRA adapter for [`google/medgemma-4b-it`](https://huggingface.co/google/medgemma-4b-it). Use of the base model and adapter is subject to the applicable Health AI Developer Foundations terms:
