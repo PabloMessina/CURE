@@ -11,7 +11,7 @@
 
 **Official PyTorch implementation of CURE. Accepted as an Oral Presentation at CVPR 2026.**
 
-[CURE](https://huggingface.co/papers/2601.15408), short for **Curriculum-guided Multi-task Training for Reliable Anatomy Grounded Report Generation**, is an error-aware curriculum learning framework for reliable anatomy-grounded radiology report generation with medical Vision-Language Models.
+**CURE**, short for ***Cu**rriculum-guided Multi-task Training for **Re**liable Anatomy Grounded Report Generation*, is an error-aware curriculum learning framework for reliable anatomy-grounded radiology report generation with medical Vision-Language Models.
 
 CURE improves grounding and report quality without requiring additional data. It addresses a key failure mode of grounded medical VLMs: because many grounding datasets are abnormality-biased, models often learn to associate visual grounding mainly with abnormalities and may hallucinate findings when asked to ground normal anatomy. CURE mitigates this by introducing a fine-grained anatomy-grounded task structure and an adaptive error-aware training curriculum.
 
