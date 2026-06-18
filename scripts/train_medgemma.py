@@ -1,76 +1,74 @@
 import argparse
 import gc
-from collections import defaultdict
 import heapq
+import json
 import logging
 import os
 import random
 import re
 import shutil
-import json
-import pandas as pd
-from pathlib import Path
-from functools import partial
+from collections import defaultdict
 from datetime import datetime, timezone
+from functools import partial
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
-from accelerate.utils import gather_object, broadcast_object_list
 
 import numpy as np
+import pandas as pd
 import torch
 import transformers
-from tqdm import tqdm
 import yaml
+from accelerate.utils import broadcast_object_list, gather_object
 from peft import LoraConfig
+from torch.utils.data import ConcatDataset, DataLoader, Dataset
+from tqdm import tqdm
 from transformers import (
     AutoModelForImageTextToText,
     AutoProcessor,
     BitsAndBytesConfig,
-    TrainingArguments,
     TrainerCallback,
     TrainerControl,
     TrainerState,
+    TrainingArguments,
 )
 from transformers.trainer_utils import get_last_checkpoint
-
-
-from torch.utils.data import ConcatDataset, Dataset, DataLoader
 from trl import SFTConfig, SFTTrainer
 
 from vlm_research_kit.data.dataset_helpers import (
+    CompositeDataset,
     FormattedDataset,
     RandomSubsetDataset,
     WeightedCompositeDataset,
-    CompositeDataset,
 )
 from vlm_research_kit.data.datasets.chest_imagenome_dataset import (
-    create_chest_imagenome_dataset,
     CustomWeightedCompositeDataset,
+    create_chest_imagenome_dataset,
+)
+from vlm_research_kit.data.datasets.mimiccxr_dataset import (
+    MIMICCXRDataset,
+)
+from vlm_research_kit.data.datasets.mscxr_dataset import (
+    MSCXRPhraseGroundingDataset,
 )
 from vlm_research_kit.data.datasets.padchest_dataset import (
     PadChestGRDataset,
     PadChestGRPhraseGroundingDataset,
 )
-from vlm_research_kit.data.datasets.mscxr_dataset import (
-    MSCXRPhraseGroundingDataset,
-)
-from vlm_research_kit.data.datasets.mimiccxr_dataset import (
-    MIMICCXRDataset,
-)
+from vlm_research_kit.metrics.biomedical.cxrfescore import CXRFEScore
 from vlm_research_kit.utils.bbox_utils import calculate_bbox_union_iou
+from vlm_research_kit.utils.data_utils import convert_to_serializable
 from vlm_research_kit.utils.file_utils import (
+    get_safe_filename,
     load_config_yaml,
     load_jsonl,
     setup_experiment_dir,
-    get_safe_filename,
 )
-from vlm_research_kit.metrics.biomedical.cxrfescore import CXRFEScore
 from vlm_research_kit.utils.logging_utils import (
     ANSI_BLUE_BOLD,
     ANSI_RESET,
     setup_logging,
 )
 from vlm_research_kit.utils.tracking_utils import finalize_wandb, initialize_wandb
-from vlm_research_kit.utils.data_utils import convert_to_serializable
 
 # Setup logging as early as possible
 setup_logging()
@@ -78,7 +76,7 @@ logger = logging.getLogger(__name__)
 
 # Disable tokenizers parallelism
 # See: https://stackoverflow.com/questions/62691279/how-to-disable-tokenizers-parallelism-true-false-warning/
-import os
+
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 BASE_SEED = 42
@@ -610,9 +608,10 @@ def default_data_collator(examples: List[Dict[str, Any]]) -> Dict[str, Any]:
 BBOX_REGEX = re.compile(
     r"\[\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\]"
 )
+DESCRIPTION_REGEX = re.compile(r"Description.*?:(.*)")
 
-def _compute_prediction_metrics(row: pd.Series):
-    """Helper function to compute bbox and text metrics for a single row."""
+def _compute_iou_and_clean_text(row: pd.Series):
+    """Helper function to compute IoU and clean text for a single row."""
     gt_text: str = row["ground_truth"]
     pred_text: str = row["prediction"]
 
@@ -634,14 +633,20 @@ def _compute_prediction_metrics(row: pd.Series):
     # 3. Clean text by removing bboxes
     clean_gt = BBOX_REGEX.sub("", gt_text).strip()
     clean_gt = " ".join(clean_gt.split()) # Compress extra whitespace
+    description_match = DESCRIPTION_REGEX.search(clean_gt)
+    if description_match:
+        clean_gt = description_match.group(1).strip()
     clean_gt = (
-        clean_gt.replace(": .", ".").replace(" .", ".").replace("Description: ", "").replace(":", ".")
+        clean_gt.replace(": .", ".").replace(" .", ".").replace(":", ".")
     )
 
     clean_pred = BBOX_REGEX.sub("", pred_text).strip()
     clean_pred = " ".join(clean_pred.split()) # Compress extra whitespace
+    description_match = DESCRIPTION_REGEX.search(clean_pred)
+    if description_match:
+        clean_pred = description_match.group(1).strip()
     clean_pred = (
-        clean_pred.replace(": .", ".").replace(" .", ".").replace("Description: ", "").replace(":", ".")
+        clean_pred.replace(": .", ".").replace(" .", ".").replace(":", ".")
     )
 
     return pd.Series(
@@ -970,8 +975,8 @@ class GranularEvaluationCallback(TrainerCallback):
         df = pd.DataFrame(results)
 
         # Apply the helper to compute IoU and clean text for each row
-        metrics_df = df.apply(_compute_prediction_metrics, axis=1)
-        df = pd.concat([df, metrics_df], axis=1)
+        iou_and_clean_df = df.apply(_compute_iou_and_clean_text, axis=1)
+        df = pd.concat([df, iou_and_clean_df], axis=1)
 
         # Compute text similarity in a batch for efficiency
         clean_gts = df["clean_gt"].tolist()
@@ -1036,7 +1041,7 @@ class GranularEvaluationCallback(TrainerCallback):
                     assert not pd.isna(iou) and iou is not None, f"IoU score for location '{location}' with 'locate' prompt is NaN."
                     computed_metrics["chest-imagenome"]["per_category"]["locate"][location] = {"bbox_iou": iou}
             else:
-                raise ValueError(f"Prompt type 'locate' is not present in the dataset.")
+                raise ValueError("Prompt type 'locate' is not present in the dataset.")
 
             if "describe" in prompt_types_present:
                 computed_metrics["chest-imagenome"]["per_category"]["describe"] = {}
@@ -1049,7 +1054,7 @@ class GranularEvaluationCallback(TrainerCallback):
                     assert not pd.isna(sim) and sim is not None, f"CXRFEScore for location '{location}' with 'describe' prompt is NaN."
                     computed_metrics["chest-imagenome"]["per_category"]["describe"][location] = {"cxrfescore": sim}
             else:
-                raise ValueError(f"Prompt type 'describe' is not present in the dataset.")
+                raise ValueError("Prompt type 'describe' is not present in the dataset.")
 
             if "locate_and_describe" in prompt_types_present:
                 computed_metrics["chest-imagenome"]["per_category"]["locate_and_describe"] = {}
@@ -1068,7 +1073,7 @@ class GranularEvaluationCallback(TrainerCallback):
                         "cxrfescore": sim,
                     }
             else:
-                raise ValueError(f"Prompt type 'locate_and_describe' is not present in the dataset.")
+                raise ValueError("Prompt type 'locate_and_describe' is not present in the dataset.")
         
         # 2) Handle the other datasets
         for dataset_name in df["dataset_name"].unique():
@@ -1251,7 +1256,7 @@ def apply_resampling_weights(
         final_train_dataset.update_weights(flattened_weights)
 
     if is_main_process:
-        logger.info(f"Resampling weights applied successfully.")
+        logger.info("Resampling weights applied successfully.")
 
 
 def setup_and_train(
@@ -1854,7 +1859,7 @@ def main(debug: bool = False):
                         if (not skip_curriculum_reweighting and
                             entry_global_step % curriculum_reweighting_every_n_steps == 0):
                             if is_main_process:
-                                logger.info(f" *** Found a past evaluation point where reweighting should be applied. ***")
+                                logger.info(" *** Found a past evaluation point where reweighting should be applied. ***")
                             reweighting_entry = entry
                             # Don't break here because we need to find the latest reweighting entry that applies to the current step.
                     if reweighting_entry is not None:
@@ -1886,7 +1891,7 @@ def main(debug: bool = False):
                 if not concatenate_train_datasets_without_weighted_sampling:
                     logger.info(f"Current training dataset weights: {final_train_dataset.weights}")
                 else:
-                    logger.info(f"No training dataset weights are available when concatenate_train_datasets_without_weighted_sampling is True.")
+                    logger.info("No training dataset weights are available when concatenate_train_datasets_without_weighted_sampling is True.")
                 logger.info(f"Resume path: {resume_path}")
                 logger.info(f"Pretrained adapter path: {pretrained_adapter_path}")            
             

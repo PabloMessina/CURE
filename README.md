@@ -1,10 +1,60 @@
 # CURE: Curriculum-guided Multi-task Training for Reliable Anatomy Grounded Report Generation
 
-**Official PyTorch Implementation**
+[![Project Page](https://img.shields.io/badge/Project-Page-blue)](https://pablomessina.github.io/cure-project-page/)
+[![CVPR Page](https://img.shields.io/badge/CVPR-Official%20Proceedings-blueviolet)](https://openaccess.thecvf.com/content/CVPR2026/html/Messina_CURE_Curriculum-guided_Multi-task_Training_for_Reliable_Anatomy_Grounded_Report_Generation_CVPR_2026_paper.html)
+[![Google Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1E4OyQZ58tvqCrMB-zWQ6rb-yJtZ9wAQL?usp=sharing)
+[![Hugging Face Model](https://img.shields.io/badge/HuggingFace-Model-yellow?logo=huggingface)](https://huggingface.co/pamessina/medgemma-4b-it-cure)
+[![Paper](https://img.shields.io/badge/arXiv-2601.15408-b31b1b.svg)](https://arxiv.org/abs/2601.15408)
+[![Slides](https://img.shields.io/badge/Google-Slides-F4B400?logo=googledrive)](https://docs.google.com/presentation/d/1Oek2gXr8CdbEndeGAj4oZLC24tnITuNhLiL8d2yHsn8/edit?usp=sharing)
+[![Live Oral](https://img.shields.io/badge/Live-Oral_Presentation-FF0000?logo=youtube)](https://youtu.be/w53pVA7ubvU?t=19417)
+[![5-Min Video](https://img.shields.io/badge/5--Min-Video-FF0000?logo=youtube)](https://youtu.be/p7qbBITjtRc)
 
-This repository contains the code and resources for **CURE**, a framework for training Biomedical Vision-Language Models (Biomed-VLMs) developed at the IVUL group, KAUST.
+**Official PyTorch implementation of CURE. Accepted as an Oral Presentation at CVPR 2026.**
 
-CURE enhances medical VLMs by reformulating training into a **fine-grained instructional format** and introducing an **Error-Aware Curriculum**. This curriculum dynamically adjusts sampling probabilities based on the model's performance across datasets (Inter-Dataset) and anatomical regions (Intra-Dataset), allowing the model to focus on challenging samples and underperforming regions.
+[CURE](https://huggingface.co/papers/2601.15408), short for **Curriculum-guided Multi-task Training for Reliable Anatomy Grounded Report Generation**, is an error-aware curriculum learning framework for reliable anatomy-grounded radiology report generation with medical Vision-Language Models.
+
+CURE improves grounding and report quality without requiring additional data. It addresses a key failure mode of grounded medical VLMs: because many grounding datasets are abnormality-biased, models often learn to associate visual grounding mainly with abnormalities and may hallucinate findings when asked to ground normal anatomy. CURE mitigates this by introducing a fine-grained anatomy-grounded task structure and an adaptive error-aware training curriculum.
+
+This repository contains the code, configuration files, SLURM utilities, notebooks, and evaluation tools used to train and evaluate CURE.
+
+## Highlights
+
+- **CVPR 2026 Oral:** CURE was accepted as an oral presentation at CVPR 2026.
+- **Hugging Face checkpoint:** A LoRA adapter finetuned from [`google/medgemma-4b-it`](https://huggingface.co/google/medgemma-4b-it) is available at [`pamessina/medgemma-4b-it-cure`](https://huggingface.co/pamessina/medgemma-4b-it-cure).
+- **Project page:** See the project website for paper, videos, slides, and visual results: <https://pablomessina.github.io/cure-project-page/>.
+- **Colab demo:** For the easiest inference experience, including image preprocessing and visualization utilities, use the official Colab notebook: <https://colab.research.google.com/drive/1E4OyQZ58tvqCrMB-zWQ6rb-yJtZ9wAQL?usp=sharing>.
+
+## Contributions & Takeaways
+
+CURE has two main components:
+
+1. **Anatomy-Grounded Report Generation (AGRG):**  
+   A task that teaches the model to localize and describe specific anatomical regions. By decomposing reports using Chest ImaGenome annotations, CURE provides grounding supervision for both normal and abnormal anatomy, reducing abnormality-biased grounding behavior.
+
+2. **Error-Aware Curriculum:**  
+   A dynamic adaptive sampling strategy that addresses dataset and class imbalance. The curriculum uses validation performance to prioritize datasets, anatomical regions, and semantic classes where the model currently performs worse.
+
+**Main takeaway:** To build reliable medical VLMs, it is important to ground and describe normal anatomy, not only abnormalities, and to adaptively sample difficult datasets and classes during training.
+
+## Key Results
+
+CURE achieves the following:
+
+- **67% relative reduction in abnormality hallucinations** on average across six anatomical locations. For example, clavicle hallucination rates dropped from approximately 60% to 1%.
+- **Improved visual grounding** over strong baselines such as MAIRA-2 on Phrase Grounding and Grounded Report Generation on specific datasets including MS-CXR, PadChest-GR, and VinDr-CXR.
+- **Competitive standard report generation quality** on MIMIC-CXR by combining AGRG outputs over 29 anatomical locations with standard Grounded Report Generation (GRG).
+
+## Model Details
+
+- **Model name:** CURE
+- **Model type:** Medical Vision-Language Model adapter
+- **Base model:** [`google/medgemma-4b-it`](https://huggingface.co/google/medgemma-4b-it)
+- **Adapter:** [`pamessina/medgemma-4b-it-cure`](https://huggingface.co/pamessina/medgemma-4b-it-cure)
+- **Adapter type:** LoRA / PEFT
+- **Pipeline:** Image-text-to-text
+- **Developed by:** Pablo Messina, Andrés Villa, Juan León Alcázar, Karen Sánchez, Carlos Hinojosa, Denis Parra, Álvaro Soto, Bernard Ghanem
+- **Affiliations:** Pontificia Universidad Católica de Chile, King Abdullah University of Science and Technology (KAUST), CENIA, iHEALTH
+- **License:** The base model and adapter are subject to the Health AI Developer Foundations terms. See: <https://developers.google.com/health-ai-developer-foundations/terms>
 
 ## Supported Tasks & Prompts
 
@@ -32,12 +82,26 @@ Standard multi-task learning suffers from data imbalance. CURE mitigates this vi
 1.  **Inter-Dataset Curriculum:** Re-weights the sampling probability of entire datasets (e.g., Chest ImaGenome vs. MS-CXR) based on aggregate error rates.
 2.  **Intra-Dataset Curriculum:** Re-weights specific anatomical regions or semantic classes within a dataset based on fine-grained performance metrics (IoU and CXRFEScore).
 
+## Methodology: Error-Aware Curriculum
+
+Standard multi-task learning in medical VLMs suffers from strong data imbalance across datasets, tasks, abnormality classes, and anatomical regions. CURE mitigates this using an adaptive curriculum that updates sampling probabilities based on validation performance.
+
+The curriculum operates at two levels:
+
+1. **Inter-Dataset Curriculum:**  
+   Re-weights the sampling probability of entire datasets, such as Chest ImaGenome, MS-CXR, and PadChest-GR, based on aggregate error rates.
+
+2. **Intra-Dataset Curriculum:**  
+   Re-weights anatomical regions or semantic classes within a dataset based on fine-grained performance metrics.
+
+For grounded tasks, the curriculum uses localization and text-quality signals such as **IoU** and **CXRFEScore**. This allows the model to focus on difficult datasets, underperforming anatomical regions, and challenging semantic classes throughout training.
+
 ## Setup and Installation
 
-1.  **Clone the repository:**
+1. **Clone the repository:**
 
     ```bash
-    git clone [https://github.com/PabloMessina/CURE.git](https://github.com/PabloMessina/CURE.git)
+    git clone https://github.com/PabloMessina/CURE.git
     cd CURE
     ```
 
@@ -79,31 +143,52 @@ cp .env.example .env
 
 This project is optimized for SLURM clusters. All heavy lifting is handled via scripts in the `slurm/` directory.
 
-### 1\. Training (MedGemma with CURE)
+### 1. Training MedGemma with CURE
 
-The primary training script is `scripts/train_medgemma.py`.
+The primary training script is:
+
+```text
+scripts/train_medgemma.py
+```
+
+Training jobs are submitted through the SLURM wrapper:
+
+```text
+slurm/submit_medgemma_training.sh
+```
 
 **Syntax:**
 
 ```bash
-./slurm/submit_medgemma_training.sh <config_path> <num_nodes> <job_time_limit> <conda_env> <node_list>
+./slurm/submit_medgemma_training.sh <config_path> [num_gpus] [memory_gb] [time_limit] [conda_env] [target_node]
 ```
 
-**Example (CURE Curriculum Run):**
+**Arguments:**
+
+- `config_path`: Path to the training YAML configuration file.
+- `num_gpus`: Number of GPUs to request. Defaults to `1`.
+- `memory_gb`: Amount of RAM in GB to request. Defaults to `64`.
+- `time_limit`: Maximum job runtime in SLURM format, e.g. `3-00:00:00`. Defaults to `1-00:00:00`.
+- `conda_env`: Name of the conda environment to use. Defaults to `py313`.
+- `target_node`: Optional node hostname. If omitted, SLURM will schedule the job on any available eligible node.
+
+**Example: CURE curriculum run**
 
 ```bash
 ./slurm/submit_medgemma_training.sh \
-    configs/training/multi_task_medgemma-4b-it_v20_custom_eval_500_steps_curriculum_3000_steps.yaml \
-    1 \
-    60 \
-    3-00:00:00 \
-    vlm \
-    <your_node_name>
+  configs/training/multi_task_medgemma-4b-it_v20_custom_eval_500_steps_curriculum_3000_steps.yaml \
+  1 \
+  60 \
+  3-00:00:00 \
+  vlm \
+  <your_node_name>
 ```
+
+This requests one GPU, 60 GB of RAM, a three-day time limit, the `vlm` conda environment, and optionally targets `<your_node_name>`.
 
 ### 2\. Evaluation
 
-Evaluation is task-specific. Below are examples for our CURE model (MedGemma) and baselines (MAIRA-2, CXRMate-RGG24).
+Evaluation is task-specific. Below are examples for our CURE model (MedGemma) and baselines (MAIRA-2, CXRMate-RRG24).
 
 #### A. Standard Report Generation (MIMIC-CXR)
 
@@ -222,50 +307,73 @@ To run Jupyter Notebooks on a compute node (with or without GPU), use the `launc
 
 -----
 
-## Notebooks for Analysis
+## Notebooks
 
-Once the evaluation scripts are run, the predictions will be saved in .jsonl files associated with each evaluated checkpoint. The SLURM logs will indicate the path to the predictions.
+For inference and visualization, we recommend starting with the official Colab notebook or the local inference notebook:
 
-Once we have the prediction files, we can run the following notebooks to analyze the results, located in `notebooks/evaluation/`:
+- [Official Colab demo](https://colab.research.google.com/drive/1E4OyQZ58tvqCrMB-zWQ6rb-yJtZ9wAQL?usp=sharing)
+- `notebooks/inference/Load and run CURE from Hugging Face.ipynb`
 
-Report Generation:
+For qualitative examples, paper links, slides, videos, and visual results, see the project page: <https://pablomessina.github.io/cure-project-page/>.
 
-  * `Evaluate_MIMICCXR_Report_Generation.ipynb`
+### Evaluation Analysis
 
-Anatomy Grounded Report Generation:
-  * `Evaluate_ChestImaGenome_Anatomy_Grounded_Report_Gen.ipynb`
+After running the evaluation scripts, predictions are saved as `.jsonl` files associated with each evaluated checkpoint. The SLURM logs indicate the paths to these prediction files.
 
-Phrase Grounding:
-  * `Evaluate_MS-CXR_Phrase_Grounding.ipynb`
-  * `Evaluate_VinDr-CXR_Phrase_Grounding.ipynb`
-  * `Evaluate_PadChest-GR_Phrase_Grounding.ipynb`
+Once the prediction files are available, use the notebooks in `notebooks/evaluation/` to compute metrics and analyze results.
 
-Grounded Report Generation:
-  * `Evaluate_VinDr-CXR_Grounded_Report_Generation.ipynb`
-  * `Evaluate_PadChest-GR_Grounded_Report_Generation.ipynb`
-  
-These notebooks are used to run evaluation metrics on the predictions. We employ a comprehensive suite of metrics including **IoU** (Localization), **CheXbert** (Clinical Accuracy), **RadGraph** (Entity/Relation Overlap), **CXRFEScore** (Factual Consistency), and **RaTEScore** (Entity-aware Text Similarity).
+**Report Generation**
 
------
+- `Evaluate_MIMICCXR_Report_Generation.ipynb`
 
-## 🚀 Quick Start: Loading CURE from Hugging Face
+**Anatomy-Grounded Report Generation**
 
-We provide a pre-trained checkpoint on Hugging Face. You can load the model using 4-bit quantization for efficient inference even on consumer GPUs.
+- `Evaluate_ChestImaGenome_Anatomy_Grounded_Report_Gen.ipynb`
 
-For a complete walkthrough including **visualization utilities** for phrase grounding and grounded reports, see the notebook at `notebooks/inference/Load and run CURE from Hugging Face.ipynb`.
+**Phrase Grounding**
+
+- `Evaluate_MS-CXR_Phrase_Grounding.ipynb`
+- `Evaluate_VinDr-CXR_Phrase_Grounding.ipynb`
+- `Evaluate_PadChest-GR_Phrase_Grounding.ipynb`
+
+**Grounded Report Generation**
+
+- `Evaluate_VinDr-CXR_Grounded_Report_Generation.ipynb`
+- `Evaluate_PadChest-GR_Grounded_Report_Generation.ipynb`
+
+These notebooks are used to run evaluation metrics on the generated predictions. We employ a comprehensive suite of metrics, including **IoU** for localization, **CheXbert** for clinical accuracy, **RadGraph** for entity/relation overlap, **CXRFEScore** for factual consistency, and **RaTEScore** for entity-aware text similarity.
+
+----
+
+## Quick Start: Loading CURE from Hugging Face
+
+We provide a pretrained CURE LoRA adapter on Hugging Face:
+
+- **Base model:** [`google/medgemma-4b-it`](https://huggingface.co/google/medgemma-4b-it)
+- **CURE adapter:** [`pamessina/medgemma-4b-it-cure`](https://huggingface.co/pamessina/medgemma-4b-it-cure)
+
+The adapter can be loaded with 4-bit quantization for efficient inference on consumer GPUs.
+
+For the easiest end-to-end inference experience, including the image transformation pipeline and bounding box visualization utilities, use the official Colab notebook:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1E4OyQZ58tvqCrMB-zWQ6rb-yJtZ9wAQL?usp=sharing)
+
+A complete local walkthrough is also available in:
+
+```text
+notebooks/inference/Load and run CURE from Hugging Face.ipynb
+```
 
 ### Python Example
 
 ```python
 import torch
-from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
 from peft import PeftModel
+from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
 
-# Configuration
 BASE_MODEL_ID = "google/medgemma-4b-it"
 ADAPTER_ID = "pamessina/medgemma-4b-it-cure"
 
-# 4-bit Quantization Config (Must match training settings)
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_use_double_quant=True,
@@ -274,28 +382,84 @@ quantization_config = BitsAndBytesConfig(
     bnb_4bit_quant_storage=torch.bfloat16,
 )
 
-# Load Model & Adapter
 base_model = AutoModelForImageTextToText.from_pretrained(
     BASE_MODEL_ID,
     quantization_config=quantization_config,
     torch_dtype=torch.bfloat16,
     device_map="auto",
 )
+
 model = PeftModel.from_pretrained(base_model, ADAPTER_ID)
+
 processor = AutoProcessor.from_pretrained(BASE_MODEL_ID)
+processor.tokenizer.padding_side = "left"
 
 model.eval()
 print("CURE model and processor are ready for inference.")
+```
 
+> [!IMPORTANT]
+> For best performance, use the same image preprocessing pipeline used during evaluation. In particular, CURE uses the `pil_with_augmentations` transform pipeline with deterministic CLAHE settings during evaluation. See the inference notebook and evaluation examples for details.
+
+## Recommended Inference Prompts
+
+CURE supports several grounded radiology tasks through natural-language instructions:
+
+### Phrase Grounding
+
+```text
+Ground the phrase: cardiomegaly
+```
+
+Expected output format:
+
+```text
+cardiomegaly: [cx, cy, w, h]
+```
+
+### Grounded Report Generation
+
+```text
+Generate a grounded report.
+```
+
+Expected output format:
+
+```text
+Slight residual atelectasis [cx, cy, w, h]. ...
+```
+
+### Anatomy-Grounded Report Generation
+
+```text
+Locate and describe the right lung.
+```
+
+Expected output format:
+
+```text
+Location of the right lung: [cx, cy, w, h]. Description: ...
+```
+
+You can also use location-only or description-only prompts:
+
+```text
+Locate the cardiac silhouette.
+```
+
+```text
+Describe the left lower lung zone.
 ```
 
 ---
 
-## 🛠 Support and Contributions
+## Support and Contributions
 
 We welcome feedback and contributions to improve the reliability of Biomedical VLMs.
 
-* **Issues:** If you encounter bugs, have questions about the methodology, or face issues with cluster setup, please **[open an issue](https://www.google.com/search?q=https://github.com/PabloMessina/ivul-biomed-vlm/issues)**. We aim to respond as quickly as possible.
+- **Issues:** If you encounter bugs, have questions about the methodology, or face issues with cluster setup, please [open an issue](https://github.com/PabloMessina/CURE/issues). We aim to respond as quickly as possible.
+- **Pull Requests:** Contributions to the `CURE` repository are welcome.
+
 
 * **Pull Requests:** Contributions to the `CURE` repository are welcome.
 
@@ -310,12 +474,12 @@ CURE/
 │   ├── prompts/           # LLM prompts for report labeling and annotation
 │   └── training/          # Multi-task & Curriculum training YAML configs
 ├── notebooks/
-│   ├── evaluation/        # Task-specific analysis (Cig, MIMIC, MS-CXR, etc.)
+│   ├── evaluation/        # Task-specific analysis (Chest ImaGenome, MIMIC-CXR, MS-CXR, etc.)
 │   └── inference/         # Tutorial: Load and run CURE from Hugging Face
 ├── scripts/               # Core Python executables (Train, Eval, LLM labeling)
 ├── slurm/                 # SLURM cluster submission and interactive scripts
 ├── vlm_research_kit/      # Core library (Internal Logic)
-│   ├── data/              # Dataset loaders (MIMIC, PadChest, VinDr, etc.)
+│   ├── data/              # Dataset loaders (MIMIC-CXR, PadChest-GR, VinDr-CXR, etc.)
 │   ├── evaluation/        # Evaluation loop logic
 │   ├── metrics/           # Bio-metrics (CheXbert, RadGraph, RaTEScore, etc.)
 │   ├── training/          # Training factories and schedulers
@@ -325,21 +489,35 @@ CURE/
 └── requirements.txt       # Production dependencies
 ```
 
+## License and Terms
+
+CURE is distributed as a PEFT/LoRA adapter for [`google/medgemma-4b-it`](https://huggingface.co/google/medgemma-4b-it). Use of the base model and adapter is subject to the applicable Health AI Developer Foundations terms:
+
+<https://developers.google.com/health-ai-developer-foundations/terms>
+
+Please ensure that your use complies with the relevant model license, dataset licenses, institutional policies, and regulations for medical AI research.
+
+## Disclaimer
+
+CURE is intended for research use. It is not a medical device and should not be used for clinical decision-making without appropriate validation, regulatory approval, and expert oversight.
+
 ## Citation
 
-If you find this code useful, please cite our paper:
+If you find this code or model useful, please cite our CVPR 2026 paper:
+
+Paper: <https://arxiv.org/abs/2601.15408>
 
 ```bibtex
-@article{messina2026cure,
-  title={CURE: Curriculum-guided Multi-task Training for Reliable Anatomy Grounded Report Generation},
-  author={Messina, Pablo and ...},
-  journal={arXiv preprint arXiv:XXXX.XXXXX},
-  year={2026}
+@InProceedings{Messina_2026_CVPR,
+    author    = {Messina, Pablo and Villa, Andr\'es and Alcazar, Juan Leon and Sanchez, Karen and Hinojosa, Carlos and Parra, Denis and Soto, Alvaro and Ghanem, Bernard},
+    title     = {CURE: Curriculum-guided Multi-task Training for Reliable Anatomy Grounded Report Generation},
+    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+    month     = {June},
+    year      = {2026},
+    pages     = {36279-36289}
 }
 ```
 
 ## Acknowledgments
 
-This work was supported by the **IVUL group at KAUST**.
-
-Pablo Messina was supported in Chile by **ANID** through **iHEALTH** (ICN2021_004), **CENIA** (FB210017), and the **ANID Scholarship Program/Doctorado Becas Chile/2019-21191569**.
+This work was conducted while P. Messina was a remote research intern at the Image and Video Understanding Lab (IVUL) at KAUST, under the supervision of B. Ghanem. P. Messina was supported by the ANID Scholarship Program (Doctorado Becas Chile 2019-21191569). We also acknowledge the support of Fondecyt grant 1231724. This work was also funded by ANID - Millennium Science Initiative Program - ICN2021_004 (iHEALTH) as well as ICN17_002 (IMFD), and by the National Center for Artificial Intelligence (CENIA) FB210017, Basal Funds for Centers of Excellence (ANID). The research reported in this publication was supported by funding from King Abdullah University of Science and Technology (KAUST) - Center of Excellence for Generative AI, under award number 5940.

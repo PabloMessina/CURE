@@ -1,17 +1,17 @@
-#!/bin/bash
-#
 # Wrapper script to submit SLURM jobs for MedGemma training.
 #
 # Usage:
-#   ./slurm/submit_medgemma_training.sh /path/to/config.yaml [num_gpus] [memory_gb] [time_limit] [conda_env]
+#   ./slurm/submit_medgemma_training.sh /path/to/config.yaml [num_gpus] [memory_gb] [time_limit] [conda_env] [target_node]
 #
 # Arguments:
 #   config_path: (Required) Path to the training YAML configuration file.
 #   num_gpus:    (Optional) Number of GPUs to request. Defaults to 1.
-#   memory_gb:   (Optional) Amount of RAM in GB to request. Defaults to 32.
+#   memory_gb:   (Optional) Amount of RAM in GB to request. Defaults to 64.
 #   time_limit:  (Optional) Max job runtime in SLURM format (e.g., D-HH:MM:SS).
 #                Defaults to "1-00:00:00" (1 day).
 #   conda_env:   (Optional) Name of the conda environment to use. Defaults to "py313".
+#   target_node: (Optional) Specific node hostname to target. If omitted, SLURM
+#                will schedule the job on any available eligible node.
 #
 # Examples:
 #   # 1. Run with all defaults (1 GPU, 64GB RAM, 1 day limit)
@@ -31,11 +31,14 @@
 #
 #   # 6. Use a different conda environment
 #   ./slurm/submit_medgemma_training.sh configs/my_experiment.yaml 1 32 1-00:00:00 myenv
+#
+#   # 7. Target a specific node
+#   ./slurm/submit_medgemma_training.sh configs/my_experiment.yaml 1 64 1-00:00:00 vlm node01
 
 # --- Validate Input ---
 if [ -z "$1" ]; then
     echo "ERROR: No training config path provided."
-    echo "Usage: $0 /path/to/config.yaml [num_gpus] [memory_gb] [time_limit] [conda_env]"
+    echo "Usage: $0 /path/to/config.yaml [num_gpus] [memory_gb] [time_limit] [conda_env] [target_node]"
     exit 1
 fi
 CONFIG_PATH=$1
