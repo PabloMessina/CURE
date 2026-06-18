@@ -494,19 +494,6 @@ These notebooks are used to run evaluation metrics on the generated predictions.
 
 ---
 
-## Support and Contributions
-
-We welcome feedback and contributions to improve the reliability of Biomedical VLMs.
-
-- **Issues:** If you encounter bugs, have questions about the methodology, or face issues with cluster setup, please [open an issue](https://github.com/PabloMessina/CURE/issues). We aim to respond as quickly as possible.
-- **Pull Requests:** Contributions to the `CURE` repository are welcome.
-
-
-* **Pull Requests:** Contributions to the `CURE` repository are welcome.
-
----
-
-
 ## Project Structure
 
 ```
@@ -529,6 +516,17 @@ CURE/
 ├── pyproject.toml         # Project metadata and build system
 └── requirements.txt       # Production dependencies
 ```
+
+---
+
+## Support and Contributions
+
+We welcome feedback and contributions to improve the reliability of Biomedical VLMs.
+
+- **Issues:** If you encounter bugs, have questions about the methodology, or face issues with cluster setup, please [open an issue](https://github.com/PabloMessina/CURE/issues). We aim to respond as quickly as possible.
+- **Pull Requests:** Contributions to the `CURE` repository are welcome.
+
+* **Pull Requests:** Contributions to the `CURE` repository are welcome.
 
 ## License and Terms
 
